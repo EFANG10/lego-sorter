@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Large Datasets & Archives
+dataset/
+dataset.tar.gz
+ldraw_lib/
+lego_sorter_app.tar.gz
+tools/*.AppImage
+*.deb
+
+# System & IDE artifacts
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+*.log

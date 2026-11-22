@@ -1,0 +1,25 @@
+{
+  "camera_source": 0,
+  "camera_resolution": [
+    640,
+    480
+  ],
+  "camera_fps": 30,
+  "threshold_mode": "adaptive",
+  "threshold_val": 120,
+  "min_contour_area": 800,
+  "max_contour_area": 120000,
+  "snapshot_count": 5,
+  "trigger_line_x": 0.5,
+  "arduino_port": "MOCK",
+  "arduino_baud": 115200,
+  "gate_pulse_ms": 350,
+  "model_type": "mock",
+  "model_path": "",
+  "labels_path": "",
+  "top_k": 5,
+  "confidence_threshold": 0.35,
+  "num_conveyor_spots": 4,
+  "chute_rows_per_spot": 2,
+  "active_preset": "TwoSideMasterPreset"
+}
