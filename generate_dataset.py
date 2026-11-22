@@ -33,8 +33,8 @@ OSMESA_BIN = DEFAULT_WORKSPACE / "tools" / "ldview-osmesa"
 STD_LDVIEW = DEFAULT_WORKSPACE / "tools" / "ldview-dist" / "usr" / "bin" / "LDView"
 DEFAULT_LDVIEW = OSMESA_BIN if OSMESA_BIN.exists() else STD_LDVIEW
 DEFAULT_LDRAW_DIR = DEFAULT_WORKSPACE / "ldraw_lib" / "ldraw"
-TOP_1000_FILE = DEFAULT_WORKSPACE / "top_1000_parts.txt"
-ALL_PARTS_CACHE = DEFAULT_WORKSPACE / "all_possible_parts.txt"
+TOP_2000_FILE = DEFAULT_WORKSPACE / "top_2000_parts.txt"
+ALL_PARTS_FILE = DEFAULT_WORKSPACE / "all_parts.txt"
 
 # Standard popular LEGO color codes
 POPULAR_LEGO_COLORS = [
@@ -105,8 +105,8 @@ def load_ldraw_colors(ldconfig_path: Path):
 
 def discover_all_parts(ldraw_parts_dir: Path):
     """Scans and filters all valid renderable parts from LDraw library."""
-    if ALL_PARTS_CACHE.exists():
-        with open(ALL_PARTS_CACHE, "r", encoding="utf-8") as f:
+    if ALL_PARTS_FILE.exists():
+        with open(ALL_PARTS_FILE, "r", encoding="utf-8") as f:
             cached = [line.strip() for line in f if line.strip()]
         if cached:
             return cached
@@ -124,7 +124,7 @@ def discover_all_parts(ldraw_parts_dir: Path):
         except Exception:
             continue
 
-    with open(ALL_PARTS_CACHE, "w", encoding="utf-8") as f:
+    with open(ALL_PARTS_FILE, "w", encoding="utf-8") as f:
         for p in valid:
             f.write(p + "\n")
 
@@ -371,6 +371,11 @@ def main():
         description="Generate synthetic LEGO dataset for machine vision sorting."
     )
     parser.add_argument(
+        "--top-2000",
+        action="store_true",
+        help="Render the top 2,000 most common LEGO parts in existence (default)",
+    )
+    parser.add_argument(
         "--top-1000",
         action="store_true",
         help="Render the top 1,000 most common LEGO parts in existence",
@@ -388,7 +393,7 @@ def main():
     parser.add_argument(
         "--parts-file",
         type=str,
-        help="Path to file listing part numbers (e.g. top_1000_parts.txt, common_parts.txt)",
+        help="Path to file listing part numbers (e.g. top_2000_parts.txt, all_parts.txt)",
     )
     parser.add_argument(
         "--num-images",
@@ -472,12 +477,19 @@ def main():
         sys.exit(f"Error: LDraw parts library not found at {ldraw_dir / 'parts'}")
 
     # Discover / resolve parts
-    if args.top_1000 or (not args.all_parts and not args.parts and not args.parts_file and TOP_1000_FILE.exists()):
-        # Default to top 1,000 parts
-        with open(TOP_1000_FILE, "r", encoding="utf-8") as f:
+    if args.top_1000 and TOP_2000_FILE.exists():
+        with open(TOP_2000_FILE, "r", encoding="utf-8") as f:
+            parts = [line.strip() for line in f if line.strip() and not line.startswith("#")][:1000]
+    elif args.top_2000 or (not args.all_parts and not args.parts and not args.parts_file and TOP_2000_FILE.exists()):
+        # Default to top 2,000 parts
+        with open(TOP_2000_FILE, "r", encoding="utf-8") as f:
             parts = [line.strip() for line in f if line.strip() and not line.startswith("#")]
     elif args.all_parts:
-        parts = discover_all_parts(ldraw_dir / "parts")
+        if ALL_PARTS_FILE.exists():
+            with open(ALL_PARTS_FILE, "r", encoding="utf-8") as f:
+                parts = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        else:
+            parts = discover_all_parts(ldraw_dir / "parts")
     elif args.parts:
         parts = list(args.parts)
     elif args.parts_file:
