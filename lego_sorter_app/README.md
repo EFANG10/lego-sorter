@@ -39,10 +39,21 @@ Designed to run on Ubuntu (24.04 LTS & derivatives) as a standalone application 
    - Non-blocking hardware gate timing and automatic simulation fallback when hardware is not plugged in.
    - Arduino sketch provided in [`arduino/lego_sorter_gates.ino`](arduino/lego_sorter_gates.ino).
 
-6. **Custom Port Selection & Clean Shutdown**:
+6. **Native Standalone Window & PWA Support**:
+   - The GUI automatically launches in its **own dedicated window** (no browser URL bar, no tabs, no search box) via native Chromium application mode (`--app`) or isolated profile.
+   - Looks and behaves like a native desktop app with full window controls and taskbar icon.
+   - Closing the native window cleanly shuts down the server, releases camera and serial resources, and unbinds the port.
+   - Desktop entry installed to `~/.local/share/applications/lego-sorter.desktop` for 1-click launch from the Ubuntu application menu.
+   - PWA manifest included for standalone app mode on mobile phones and tablets.
+
+7. **Custom Port Selection & Clean Shutdown**:
    - Start the server on any custom network port:
      ```bash
      ./start_sorter.sh --port 8080
+     ```
+   - Run in server-only / headless mode without opening a desktop window:
+     ```bash
+     ./start_sorter.sh --no-window
      ```
    - **⏻ Shutdown Button**: Stops camera tracking, closes serial ports, and cleanly unbinds the port from the browser UI or terminal.
 

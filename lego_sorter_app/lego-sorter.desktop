@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=LEGO Sorter
+GenericName=LEGO Sorter Control Center
+Comment=Autonomous LEGO Brick Sorter GUI & Hardware Controller
+Exec="/home/ethan/Documents/lego sorter/lego_sorter_app/start_sorter.sh"
+Icon=/home/ethan/Documents/lego sorter/lego_sorter_app/static/thumbnails/3001.png
+Terminal=false
+Categories=Development;Engineering;Utility;
+StartupNotify=true
+StartupWMClass=lego-sorter-gui

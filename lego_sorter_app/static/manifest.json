@@ -1,0 +1,18 @@
+{
+  "name": "Autonomous LEGO Sorter",
+  "short_name": "LegoSorter",
+  "description": "Autonomous LEGO Brick Sorter GUI & Hardware Controller",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#12151b",
+  "theme_color": "#12151b",
+  "icons": [
+    {
+      "src": "/static/thumbnails/3001.png",
+      "sizes": "224x224",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

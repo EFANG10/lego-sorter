@@ -66,12 +66,23 @@ echo "[3/4] Installing Python requirements..."
     "tqdm>=4.66.0"
 
 # 4. Check permissions on serial devices (dialout group)
-echo "[4/4] Checking serial port permissions for Arduino..."
+echo "[4/5] Checking serial port permissions for Arduino..."
 if [ -n "$USER" ]; then
     if ! id -nG "$USER" | grep -qw "dialout"; then
         echo "Note: To access USB serial ports without sudo, your user should be in the 'dialout' group."
         echo "Run: sudo usermod -a -G dialout $USER (and log out/in)."
     fi
+fi
+
+# 5. Install Desktop Application shortcut
+echo "[5/5] Registering desktop application shortcut..."
+mkdir -p ~/.local/share/applications/ 2>/dev/null || true
+if [ -f "$APP_DIR/lego-sorter.desktop" ]; then
+    sed -i "s|Exec=.*|Exec=\"$APP_DIR/start_sorter.sh\"|g" "$APP_DIR/lego-sorter.desktop"
+    sed -i "s|Icon=.*|Icon=$APP_DIR/static/thumbnails/3001.png|g" "$APP_DIR/lego-sorter.desktop"
+    cp "$APP_DIR/lego-sorter.desktop" ~/.local/share/applications/
+    chmod +x ~/.local/share/applications/lego-sorter.desktop
+    update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
 fi
 
 chmod +x start_sorter.sh 2>/dev/null || true

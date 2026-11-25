@@ -18,8 +18,8 @@
   "model_path": "",
   "labels_path": "",
   "top_k": 5,
-  "confidence_threshold": 0.35,
-  "num_conveyor_spots": 4,
+  "confidence_threshold": 0.5,
+  "num_conveyor_spots": 7,
   "chute_rows_per_spot": 2,
   "active_preset": "TwoSideMasterPreset"
 }

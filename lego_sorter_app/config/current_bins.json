@@ -13,7 +13,7 @@
       "3004",
       "3005"
     ],
-    "count": 9,
+    "count": 10,
     "side": "top"
   },
   {
@@ -31,7 +31,7 @@
       "3710",
       "10197"
     ],
-    "count": 12,
+    "count": 10,
     "side": "bottom"
   },
   {
@@ -50,16 +50,16 @@
       "10190",
       "60596"
     ],
-    "count": 9,
+    "count": 8,
     "side": "top"
   },
   {
     "id": 3,
     "name": "Bin 3: Tiles & Smooth",
     "color": "#9b59b6",
-    "spot": 1,
-    "row": 1,
-    "delay_ms": 700,
+    "spot": 2,
+    "row": 2,
+    "delay_ms": 1050,
     "pulse_ms": 350,
     "assigned_parts": [
       "3068b",
@@ -67,16 +67,16 @@
       "3070b",
       "2412b"
     ],
-    "count": 11,
-    "side": "top"
+    "count": 10,
+    "side": "bottom"
   },
   {
     "id": 4,
     "name": "Bin 4: Technic Components",
     "color": "#e67e22",
-    "spot": 2,
-    "row": 3,
-    "delay_ms": 1050,
+    "spot": 3,
+    "row": 0,
+    "delay_ms": 1400,
     "pulse_ms": 350,
     "assigned_parts": [
       "2780",
@@ -102,16 +102,16 @@
       "3626c",
       "973"
     ],
-    "count": 8,
+    "count": 7,
     "side": "bottom"
   },
   {
     "id": 6,
     "name": "Bin 6: Chute Tier Test",
     "color": "#e84393",
-    "spot": 0,
-    "row": 2,
-    "delay_ms": 350,
+    "spot": 4,
+    "row": 0,
+    "delay_ms": 1750,
     "pulse_ms": 350,
     "assigned_parts": [
       "10187"
@@ -123,9 +123,9 @@
     "id": 7,
     "name": "Bin 7: Custom Bin",
     "color": "#00cec9",
-    "spot": 0,
-    "row": 0,
-    "delay_ms": 350,
+    "spot": 4,
+    "row": 1,
+    "delay_ms": 1750,
     "pulse_ms": 350,
     "assigned_parts": [
       "60594"
@@ -149,9 +149,9 @@
     "id": 9,
     "name": "Bin 9: Custom Bin",
     "color": "#6c5ce7",
-    "spot": 2,
+    "spot": 0,
     "row": 0,
-    "delay_ms": 1050,
+    "delay_ms": 350,
     "pulse_ms": 350,
     "assigned_parts": [],
     "count": 0,
@@ -161,13 +161,27 @@
     "id": 10,
     "name": "Bin 10: Custom Bin",
     "color": "#3498db",
-    "spot": 3,
+    "spot": 5,
     "row": 0,
     "delay_ms": 2100,
     "pulse_ms": 350,
     "assigned_parts": [],
     "count": 0,
     "side": "top"
+  },
+  {
+    "id": 11,
+    "name": "2x4bricks",
+    "color": "#2ecc71",
+    "spot": 5,
+    "side": "bottom",
+    "row": 0,
+    "delay_ms": 2100,
+    "pulse_ms": 350,
+    "assigned_parts": [
+      "3437"
+    ],
+    "count": 0
   },
   {
     "id": -1,
@@ -178,7 +192,7 @@
     "delay_ms": 0,
     "pulse_ms": 0,
     "assigned_parts": [],
-    "count": 148,
+    "count": 214,
     "side": "end"
   }
 ]

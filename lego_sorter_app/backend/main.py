@@ -532,10 +532,21 @@ def shutdown_system(background_tasks: BackgroundTasks):
 
 if __name__ == "__main__":
     import uvicorn
+    from backend.window_launcher import launch_native_window
+
     parser = argparse.ArgumentParser(description="Autonomous LEGO Sorter Server")
     parser.add_argument("--port", "-p", type=int, default=8000, help="Port to listen on (default: 8000)")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host IP to bind (default: 0.0.0.0)")
+    parser.add_argument("--no-window", action="store_true", help="Disable launching standalone GUI window (server-only mode)")
     args = parser.parse_args()
+
+    if not args.no_window:
+        # Launch dedicated native GUI window once the server is ready
+        threading.Thread(
+            target=launch_native_window,
+            kwargs={"port": args.port, "host": args.host},
+            daemon=True
+        ).start()
 
     logger.info(f"Starting server on {args.host}:{args.port}...")
     uvicorn.run(app, host=args.host, port=args.port)

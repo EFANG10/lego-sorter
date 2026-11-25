@@ -8,8 +8,9 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Default port
+# Default options
 PORT=8000
+EXTRA_ARGS=()
 
 # Parse CLI arguments
 while [[ "$#" -gt 0 ]]; do
@@ -18,12 +19,18 @@ while [[ "$#" -gt 0 ]]; do
             PORT="$2"
             shift 2
             ;;
+        --no-window|--server-only)
+            EXTRA_ARGS+=("--no-window")
+            shift
+            ;;
         --help|-h)
-            echo "Usage: ./start_sorter.sh [--port <PORT>]"
-            echo "  --port, -p <PORT>   Specify the HTTP server port (default: 8000)"
+            echo "Usage: ./start_sorter.sh [--port <PORT>] [--no-window]"
+            echo "  --port, -p <PORT>       Specify the HTTP server port (default: 8000)"
+            echo "  --no-window             Run in headless / server-only mode (do not open native GUI window)"
             exit 0
             ;;
         *)
+            EXTRA_ARGS+=("$1")
             shift
             ;;
     esac
@@ -55,8 +62,9 @@ for ip in $IP_LIST; do
     fi
 done
 echo ""
-echo "Press Ctrl+C or use the web 'Shutdown' button to stop the server."
+echo "Native GUI window will launch automatically in its own window."
+echo "Press Ctrl+C or close the window to stop the server."
 echo "=========================================================="
 echo ""
 
-exec "$PYTHON_BIN" -m backend.main --port "$PORT" --host 0.0.0.0
+exec "$PYTHON_BIN" -m backend.main --port "$PORT" --host 0.0.0.0 "${EXTRA_ARGS[@]}"
