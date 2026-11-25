@@ -6,6 +6,7 @@ conveyor two-sided chute mapping (Top & Bottom sides, Spots & Rows), presets, an
 """
 
 import os
+import re
 import json
 import logging
 from pathlib import Path
@@ -442,6 +443,39 @@ class ConfigManager:
                 assigned.add(p.lower().strip())
         return assigned
 
+    @staticmethod
+    def _normalize_search_text(text: str) -> str:
+        """Collapses whitespace and normalizes dimension separators (e.g. '2 x 4' -> '2x4')."""
+        collapsed = " ".join(text.lower().split())
+        return re.sub(r"\s*x\s*", "x", collapsed)
+
+    def search_catalog_items(self, items: List[Dict[str, Any]], search: str) -> List[Dict[str, Any]]:
+        """
+        Filters and ranks catalog items against a search query, handling
+        dimension spacing ('2x4' matching 'Brick  2 x  4') and multi-word queries.
+        """
+        q_norm = self._normalize_search_text(search)
+        if not q_norm:
+            return items
+        q_tokens = q_norm.split()
+        q_compact = q_norm.replace(" ", "")
+
+        matched = []
+        for x in items:
+            pid = x.get("id", "").lower()
+            name_norm = self._normalize_search_text(x.get("name", ""))
+            haystack = f"{pid} {name_norm}"
+            haystack_compact = haystack.replace(" ", "")
+
+            if all(tok in haystack for tok in q_tokens) or q_compact in haystack_compact:
+                # Rank exact ID match first, then exact/shorter name matches (e.g. "Brick 2 x 4" before variants)
+                is_exact_id = (pid == q_compact)
+                starts_with_tok = name_norm.startswith(q_tokens[0])
+                matched.append((0 if is_exact_id else 1, 0 if starts_with_tok else 1, len(name_norm), pid, x))
+
+        matched.sort(key=lambda t: (t[0], t[1], t[2], t[3]))
+        return [t[4] for t in matched]
+
     def get_unassigned_parts(
         self,
         category: Optional[str] = None,
@@ -456,8 +490,7 @@ class ConfigManager:
             unassigned = [x for x in unassigned if x.get("category", "").lower() == category.lower()]
 
         if search:
-            s = search.lower().strip()
-            unassigned = [x for x in unassigned if s in x.get("id", "").lower() or s in x.get("name", "").lower()]
+            unassigned = self.search_catalog_items(unassigned, search)
 
         total = len(unassigned)
         start = (page - 1) * limit

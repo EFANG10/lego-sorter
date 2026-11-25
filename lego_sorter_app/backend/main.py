@@ -376,8 +376,7 @@ def get_catalog(
         items = [x for x in items if x.get("category", "").lower() == category.lower()]
 
     if search:
-        s = search.lower().strip()
-        items = [x for x in items if s in x.get("id", "").lower() or s in x.get("name", "").lower()]
+        items = config_mgr.search_catalog_items(items, search)
 
     total = len(items)
     start = (page - 1) * limit
@@ -524,6 +523,11 @@ def shutdown_system(background_tasks: BackgroundTasks):
 
     def terminate_proc():
         time.sleep(0.6)
+        try:
+            from backend.window_launcher import close_native_window
+            close_native_window()
+        except Exception:
+            pass
         logger.info("Unbinding port and exiting.")
         os.kill(os.getpid(), signal.SIGTERM)
 

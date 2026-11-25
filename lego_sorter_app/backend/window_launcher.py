@@ -21,6 +21,18 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 
 logger = logging.getLogger("lego_sorter.window")
+_active_window_proc: Optional[subprocess.Popen] = None
+
+
+def close_native_window():
+    """Terminates the launched native GUI window process if still running."""
+    global _active_window_proc
+    if _active_window_proc is not None and _active_window_proc.poll() is None:
+        try:
+            _active_window_proc.terminate()
+        except Exception:
+            pass
+        _active_window_proc = None
 
 
 def is_desktop_available() -> bool:
@@ -167,18 +179,26 @@ def launch_native_window(
         cmd = cmd_prefix + [target_url]
 
     try:
+        global _active_window_proc
+        launch_time = time.time()
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True
         )
+        _active_window_proc = proc
         logger.info(f"Native GUI window launched successfully (PID: {proc.pid}).")
 
         # Monitor thread: if the user closes the window, trigger graceful server shutdown
         if auto_shutdown_on_close and engine_type != "xdg_open":
             def _monitor_window():
                 proc.wait()
+                elapsed = time.time() - launch_time
+                # If browser exited immediately (< 2.5s), it handed off to an existing browser instance
+                if elapsed < 2.5:
+                    logger.info("Browser launcher handed off to existing browser process; keeping server running.")
+                    return
                 logger.info("Native GUI window was closed by the user.")
                 try:
                     shutdown_url = f"http://127.0.0.1:{port}/api/control/shutdown"

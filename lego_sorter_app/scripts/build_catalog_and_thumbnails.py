@@ -85,7 +85,18 @@ def main():
     THUMBS_DIR.mkdir(parents=True, exist_ok=True)
     
     parts_metadata = {}
-    
+
+    # 0. Seed from existing parts_catalog.json if present
+    if CATALOG_FILE.exists():
+        try:
+            with open(CATALOG_FILE, "r", encoding="utf-8") as f:
+                for item in json.load(f):
+                    pid = item.get("id", "").strip().lower()
+                    if pid:
+                        parts_metadata[pid] = item
+        except Exception:
+            pass
+
     # 1. Read detailed metadata from next_1000_parts_detailed.tsv if available
     det_tsv = WORKSPACE / "next_1000_parts_detailed.tsv"
     if det_tsv.exists():
@@ -98,8 +109,8 @@ def main():
                     name = parts[2].strip()
                     parts_metadata[pid] = {"id": pid, "name": name, "category": cat}
 
-    # 2. Add parts from top_1000_parts.txt
-    top_file = WORKSPACE / "top_1000_parts.txt"
+    # 2. Add parts from top_2000_parts.txt
+    top_file = WORKSPACE / "top_2000_parts.txt"
     all_target_ids = []
     if top_file.exists():
         with open(top_file, "r") as f:

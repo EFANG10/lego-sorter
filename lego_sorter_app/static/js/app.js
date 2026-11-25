@@ -7,6 +7,8 @@ let currentCategory = 'All';
 let currentSearch = '';
 let autoScrollLogs = true;
 let lastDetectionTimestamp = 0;
+let statusPollTimer = null;
+let logsPollTimer = null;
 
 let allBins = [];
 let allCategories = [];
@@ -26,8 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
   loadUnassignedBricks();
   
   // Polling loops
-  setInterval(pollStatusAndMetrics, 800);
-  setInterval(pollLogs, 1500);
+  statusPollTimer = setInterval(pollStatusAndMetrics, 800);
+  logsPollTimer = setInterval(pollLogs, 1500);
 });
 
 // Tab Navigation
@@ -512,6 +514,26 @@ async function deleteSelectedPreset() {
 // ----------------------------------------------------
 // 5. Bin Config Cards with Clear, Delete & Settings
 // ----------------------------------------------------
+const expandedBins = new Set();
+
+function toggleBinCard(binId) {
+  if (expandedBins.has(binId)) {
+    expandedBins.delete(binId);
+  } else {
+    expandedBins.add(binId);
+  }
+  const card = document.getElementById(`bin-card-${binId}`);
+  const btn = document.getElementById(`bin-expand-btn-${binId}`);
+  if (card) {
+    const isExpanded = expandedBins.has(binId);
+    card.classList.toggle('expanded', isExpanded);
+    if (btn) {
+      const count = btn.getAttribute('data-count') || '0';
+      btn.innerHTML = isExpanded ? `&#9662; Hide (${count})` : `&#9656; Parts (${count})`;
+    }
+  }
+}
+
 function renderBinConfigCards(bins) {
   const container = document.getElementById('bins-list-grid');
   if (!container) return;
@@ -521,8 +543,10 @@ function renderBinConfigCards(bins) {
   const reject = bins.find(b => b.id === -1);
 
   physical.forEach(bin => {
+    const isExpanded = expandedBins.has(bin.id);
+    const partsCount = (bin.assigned_parts || []).length;
     const card = document.createElement('div');
-    card.className = 'bin-config-card';
+    card.className = `bin-config-card${isExpanded ? ' expanded' : ''}`;
     card.id = `bin-card-${bin.id}`;
     card.style.borderTop = `3px solid ${bin.color || '#3b82f6'}`;
 
@@ -554,54 +578,62 @@ function renderBinConfigCards(bins) {
         `;
       });
     } else {
-      chipsHtml = `<div style="color: #64748b; font-size: 0.78rem; padding: 6px;">No parts assigned. Drag bricks here or click '+ Assign Parts'.</div>`;
+      chipsHtml = `<div style="color: #64748b; font-size: 0.76rem; padding: 4px;">No parts assigned. Drag bricks onto this card or click '+ Assign'.</div>`;
     }
 
+    const sideLabel = (bin.side || 'top') === 'top' ? 'Top' : 'Bottom';
     card.innerHTML = `
       <div class="bin-header">
         <input type="text" class="bin-name-input" value="${bin.name}" onchange="updateBinName(${bin.id}, this.value)">
         <span class="badge" style="background: ${bin.color}22; color: ${bin.color}">Bin ${bin.id}</span>
-        <button class="btn btn-sm btn-danger" style="margin-left: 4px; padding: 2px 6px;" onclick="deleteBin(${bin.id})" title="Delete Bin">&times;</button>
+        <button class="btn btn-sm btn-danger" style="padding: 2px 6px;" onclick="deleteBin(${bin.id})" title="Delete Bin">&times;</button>
       </div>
 
-      <div class="bin-hardware-row">
-        <div>
-          <label>Spot (0-${numConveyorSpots - 1}):</label>
-          <input type="number" min="0" max="${Math.max(10, numConveyorSpots)}" value="${bin.spot || 0}" onchange="updateBinProperty(${bin.id}, 'spot', parseInt(this.value))">
-        </div>
-        <div>
-          <label>Belt Side:</label>
-          <select onchange="updateBinProperty(${bin.id}, 'side', this.value)">
-            <option value="top" ${(bin.side || 'top') === 'top' ? 'selected' : ''}>Top / North</option>
-            <option value="bottom" ${(bin.side || 'top') === 'bottom' ? 'selected' : ''}>Bottom / South</option>
-          </select>
-        </div>
-        <div>
-          <label>Chute Tier:</label>
-          <input type="number" min="0" max="10" value="${bin.row || 0}" onchange="updateBinProperty(${bin.id}, 'row', parseInt(this.value))">
-        </div>
-        <div>
-          <label>Delay (ms):</label>
-          <input type="number" min="0" step="25" value="${bin.delay_ms || 400}" onchange="updateBinProperty(${bin.id}, 'delay_ms', parseInt(this.value))">
-        </div>
-      </div>
-
-      <div class="assigned-parts-grid" id="assigned-grid-${bin.id}">
-        ${chipsHtml}
-      </div>
-
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; gap: 6px; flex-wrap: wrap;">
-        <div style="display: flex; gap: 6px;">
-          <button class="btn btn-primary btn-sm" onclick="openPartPickerModal(${bin.id})">
-            + Assign Parts
+      <div class="bin-compact-summary">
+        <span>Spot ${bin.spot || 0} &bull; ${sideLabel} &bull; T${bin.row || 0} &bull; ${bin.delay_ms || 400}ms</span>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button class="btn btn-primary btn-sm" style="padding: 2px 7px; font-size: 0.72rem;" onclick="openPartPickerModal(${bin.id})">+ Assign</button>
+          <button class="bin-expand-btn" id="bin-expand-btn-${bin.id}" data-count="${partsCount}" onclick="toggleBinCard(${bin.id})">
+            ${isExpanded ? `&#9662; Hide (${partsCount})` : `&#9656; Parts (${partsCount})`}
           </button>
+        </div>
+      </div>
+
+      <div class="bin-details-collapsible">
+        <div class="bin-hardware-row">
+          <div>
+            <label>Spot (0-${numConveyorSpots - 1}):</label>
+            <input type="number" min="0" max="${Math.max(10, numConveyorSpots)}" value="${bin.spot || 0}" onchange="updateBinProperty(${bin.id}, 'spot', parseInt(this.value))">
+          </div>
+          <div>
+            <label>Belt Side:</label>
+            <select onchange="updateBinProperty(${bin.id}, 'side', this.value)">
+              <option value="top" ${(bin.side || 'top') === 'top' ? 'selected' : ''}>Top / North</option>
+              <option value="bottom" ${(bin.side || 'top') === 'bottom' ? 'selected' : ''}>Bottom / South</option>
+            </select>
+          </div>
+          <div>
+            <label>Chute Tier:</label>
+            <input type="number" min="0" max="10" value="${bin.row || 0}" onchange="updateBinProperty(${bin.id}, 'row', parseInt(this.value))">
+          </div>
+          <div>
+            <label>Delay (ms):</label>
+            <input type="number" min="0" step="25" value="${bin.delay_ms || 400}" onchange="updateBinProperty(${bin.id}, 'delay_ms', parseInt(this.value))">
+          </div>
+        </div>
+
+        <div class="assigned-parts-grid" id="assigned-grid-${bin.id}">
+          ${chipsHtml}
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 6px; flex-wrap: wrap;">
           <button class="btn btn-warning btn-sm" onclick="clearBin(${bin.id})" title="Remove all parts from this bin">
             Clear Parts
           </button>
+          <button class="btn btn-sm" onclick="testTriggerBin(${bin.id})">
+            Test Gate
+          </button>
         </div>
-        <button class="btn btn-sm" onclick="testTriggerBin(${bin.id})">
-          Test Gate
-        </button>
       </div>
     `;
     container.appendChild(card);
@@ -614,14 +646,12 @@ function renderBinConfigCards(bins) {
     rCard.style.background = '#1c1518';
     rCard.innerHTML = `
       <div class="bin-header">
-        <span style="font-weight: 700; color: #f87171;">Bin -1: End-of-Belt / Overflow Reject</span>
+        <span style="font-weight: 700; color: #f87171; font-size: 0.88rem;">Bin -1: Reject / Overflow</span>
         <span class="badge" style="background: #ef444422; color: #f87171;">Protected</span>
       </div>
-      <div style="color: #9ba5b9; font-size: 0.8rem; padding: 12px 6px;">
-        Automatic reject bin at the end of the conveyor belt. All bricks that do not match any assigned bin, or have a classifier confidence &lt; 35%, automatically slide into this bin.
-      </div>
-      <div style="display: flex; justify-content: flex-end; margin-top: auto;">
-        <button class="btn btn-sm" onclick="testTriggerBin(-1)">Test Indicator</button>
+      <div class="bin-compact-summary">
+        <span>End-of-belt (&lt;35% conf or unassigned)</span>
+        <button class="btn btn-sm" style="padding: 2px 7px; font-size: 0.72rem;" onclick="testTriggerBin(-1)">Test</button>
       </div>
     `;
     container.appendChild(rCard);
@@ -1160,18 +1190,28 @@ async function shutdownServer() {
     return;
   }
 
+  if (statusPollTimer) clearInterval(statusPollTimer);
+  if (logsPollTimer) clearInterval(logsPollTimer);
+
   try {
     await fetch('/api/control/shutdown', { method: 'POST' });
-    document.body.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #12151b; color: #fff; font-family: sans-serif; text-align: center; padding: 20px;">
-        <h1 style="color: #ef4444; margin-bottom: 12px;">LEGO Sorter Server Stopped</h1>
-        <p style="color: #9ba5b9; max-width: 500px; line-height: 1.5; margin-bottom: 20px;">
-          The vision pipeline, camera capture, and Arduino serial connection have been cleanly closed. The network port has been released.
-        </p>
-        <p style="font-size: 0.85rem; color: #64748b;">To restart, run <code>./start_sorter.sh</code> from your terminal.</p>
-      </div>
-    `;
   } catch (err) {
-    alert(`Shutdown command failed: ${err}`);
+    // Server may terminate immediately before returning response
+    console.warn('Shutdown response interrupted:', err);
   }
+
+  document.body.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #12151b; color: #fff; font-family: sans-serif; text-align: center; padding: 20px;">
+      <h1 style="color: #ef4444; margin-bottom: 12px;">LEGO Sorter Server Stopped</h1>
+      <p style="color: #9ba5b9; max-width: 500px; line-height: 1.5; margin-bottom: 20px;">
+        The vision pipeline, camera capture, and Arduino serial connection have been cleanly closed. The network port has been released.
+      </p>
+      <p style="font-size: 0.85rem; color: #64748b;">You may now close this window. To restart, run <code>./start_sorter.sh</code>.</p>
+    </div>
+  `;
+
+  // Attempt to close the standalone app window
+  setTimeout(() => {
+    try { window.close(); } catch (e) {}
+  }, 300);
 }
