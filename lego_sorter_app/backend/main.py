@@ -421,6 +421,7 @@ def get_settings():
 @app.post("/api/settings")
 def update_settings(payload: SettingsUpdate):
     data = payload.dict(exclude_unset=True)
+    old_cam = config_mgr.settings.get("camera_source")
     new_settings = config_mgr.save_settings(data)
 
     if "arduino_port" in data or "arduino_baud" in data:
@@ -429,18 +430,23 @@ def update_settings(payload: SettingsUpdate):
             baud=new_settings.get("arduino_baud", 115200)
         )
 
-    if "camera_source" in data:
-        pipeline._open_camera()
+    if "camera_source" in data and str(data["camera_source"]) != str(old_cam):
+        pipeline.request_camera_reconnect()
 
+    model_msg = ""
     if "model_path" in data or "labels_path" in data:
-        if new_settings.get("model_path"):
-            success, msg = classifier.load_model(
-                new_settings["model_path"],
-                new_settings.get("labels_path", "")
-            )
-            logger.info(f"Model load attempt: {msg}")
+        req_model = new_settings.get("model_path", "").strip()
+        req_labels = new_settings.get("labels_path", "").strip()
+        if req_model:
+            if req_model != classifier.model_path or req_labels != classifier.labels_path or classifier.model_type == "mock":
+                success, model_msg = classifier.load_model(req_model, req_labels)
+                logger.info(f"Model load attempt: {model_msg}")
+        else:
+            classifier._init_mock()
+            classifier.model_path = ""
+            model_msg = "Switched to Mock / Calibration mode."
 
-    return {"status": "ok", "settings": new_settings}
+    return {"status": "ok", "settings": new_settings, "model_message": model_msg}
 
 
 @app.post("/api/test/trigger_bin")

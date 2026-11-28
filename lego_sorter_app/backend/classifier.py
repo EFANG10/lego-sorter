@@ -10,6 +10,7 @@ import os
 import json
 import time
 import logging
+import threading
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Any
 import numpy as np
@@ -25,10 +26,15 @@ except ImportError:
 
 try:
     import torch
-    import torchvision.transforms as transforms
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
+
+try:
+    import timm
+    HAS_TIMM = True
+except ImportError:
+    HAS_TIMM = False
 
 
 class BrickClassifier:
@@ -43,12 +49,14 @@ class BrickClassifier:
             except Exception as e:
                 logger.error(f"Failed to load catalog into classifier: {e}")
 
+        self._lock = threading.Lock()
         self.model_type = "mock"
         self.model_path = model_path
         self.labels_path = labels_path
         self.classes: List[str] = []
         self.onnx_session = None
         self.torch_model = None
+        self.device = torch.device("cuda" if (HAS_TORCH and torch.cuda.is_available()) else "cpu") if HAS_TORCH else None
         self.input_size = (224, 224)
         self.last_inference_time_ms = 0.0
 
@@ -84,6 +92,7 @@ class BrickClassifier:
                 return False, f"No .onnx or .pth model found in folder: {model_path}"
 
         # Load labels if available
+        loaded_classes: List[str] = []
         labels_file = None
         if labels_path and Path(labels_path).exists():
             labels_file = Path(labels_path)
@@ -101,13 +110,13 @@ class BrickClassifier:
                     with open(labels_file, "r") as f:
                         data = json.load(f)
                         if isinstance(data, list):
-                            self.classes = [str(x).lower().strip() for x in data]
+                            loaded_classes = [str(x).lower().strip() for x in data]
                         elif isinstance(data, dict):
-                            self.classes = [str(v).lower().strip() for k, v in sorted(data.items())]
+                            loaded_classes = [str(v).lower().strip() for k, v in sorted(data.items(), key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else str(kv[0]))]
                 else:
                     with open(labels_file, "r") as f:
-                        self.classes = [line.strip().lower() for line in f if line.strip()]
-                logger.info(f"Loaded {len(self.classes)} classes from {labels_file}")
+                        loaded_classes = [line.strip().lower() for line in f if line.strip()]
+                logger.info(f"Loaded {len(loaded_classes)} classes from {labels_file}")
             except Exception as e:
                 logger.warning(f"Could not parse classes file {labels_file}: {e}")
 
@@ -118,14 +127,20 @@ class BrickClassifier:
             try:
                 options = ort.SessionOptions()
                 options.intra_op_num_threads = max(1, (os.cpu_count() or 4) // 2)
-                self.onnx_session = ort.InferenceSession(str(path), options)
-                self.model_type = "onnx"
-                self.model_path = str(path)
+                session = ort.InferenceSession(str(path), options)
+                with self._lock:
+                    if loaded_classes:
+                        self.classes = loaded_classes
+                    self.onnx_session = session
+                    self.torch_model = None
+                    self.model_type = "onnx"
+                    self.model_path = str(path)
                 logger.info(f"Successfully loaded ONNX model: {path}")
                 return True, f"Loaded ONNX model: {path.name}"
             except Exception as e:
                 logger.error(f"Failed to load ONNX model: {e}")
-                self._init_mock()
+                with self._lock:
+                    self._init_mock()
                 return False, f"Failed to load ONNX model: {e}"
 
         # Load PyTorch (.pth or .pt)
@@ -134,23 +149,58 @@ class BrickClassifier:
                 return False, "PyTorch is not installed in the environment."
             try:
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                loaded = torch.load(str(path), map_location=device)
+                loaded = torch.load(str(path), map_location=device, weights_only=False)
+                torch_model = None
+
                 if isinstance(loaded, torch.nn.Module):
-                    self.torch_model = loaded
-                elif isinstance(loaded, dict) and "state_dict" in loaded:
-                    # Generic weights dict - would need model definition
-                    logger.warning("Loaded state_dict without model definition. Defaulting to mock.")
-                    self._init_mock()
-                    return False, "Checkpoint contains state_dict. Export to ONNX for best compatibility."
+                    torch_model = loaded
+                elif isinstance(loaded, dict):
+                    ckpt_classes = loaded.get("class_names") or loaded.get("classes")
+                    if not loaded_classes and isinstance(ckpt_classes, list):
+                        loaded_classes = [str(x).lower().strip() for x in ckpt_classes]
+                        logger.info(f"Extracted {len(loaded_classes)} class names from checkpoint.")
+
+                    state_dict = (
+                        loaded.get("state_dict")
+                        or loaded.get("model_state_dict")
+                        or loaded.get("model")
+                    )
+                    if state_dict is not None and isinstance(state_dict, dict):
+                        if not HAS_TIMM:
+                            self._init_mock()
+                            return False, "timm is not installed to instantiate checkpoint architecture."
+                        model_name = loaded.get("model_name", "convnext_nano")
+                        num_classes = int(loaded.get("num_classes") or len(loaded_classes) or 1995)
+                        clean_sd = {
+                            (k[7:] if k.startswith("module.") else k): v
+                            for k, v in state_dict.items()
+                        }
+                        torch_model = timm.create_model(model_name, pretrained=False, num_classes=num_classes)
+                        torch_model.load_state_dict(clean_sd, strict=True)
+                        logger.info(f"Instantiated {model_name} ({num_classes} classes) from checkpoint.")
+                    else:
+                        self._init_mock()
+                        return False, "Checkpoint dict missing 'state_dict'."
                 else:
-                    self.torch_model = loaded
-                self.torch_model.eval()
-                self.model_type = "torch"
-                self.model_path = str(path)
-                return True, f"Loaded PyTorch model: {path.name}"
+                    self._init_mock()
+                    return False, f"Unsupported PyTorch checkpoint object: {type(loaded).__name__}"
+
+                torch_model.to(device)
+                torch_model.eval()
+                with self._lock:
+                    if loaded_classes:
+                        self.classes = loaded_classes
+                    self.torch_model = torch_model
+                    self.onnx_session = None
+                    self.device = device
+                    self.model_type = "torch"
+                    self.model_path = str(path)
+                logger.info(f"Successfully loaded PyTorch model: {path.name} on {device}")
+                return True, f"Loaded PyTorch model: {path.name} ({len(self.classes)} classes)"
             except Exception as e:
-                logger.error(f"Failed to load PyTorch model: {e}")
-                self._init_mock()
+                logger.error(f"Failed to load PyTorch model: {e}", exc_info=True)
+                with self._lock:
+                    self._init_mock()
                 return False, f"Failed to load PyTorch model: {e}"
 
         self._init_mock()
@@ -190,7 +240,7 @@ class BrickClassifier:
         elif self.model_type == "torch" and self.torch_model is not None and HAS_TORCH:
             inp = self._preprocess_crop(crop)
             with torch.no_grad():
-                tensor = torch.from_numpy(inp)
+                tensor = torch.from_numpy(inp).to(self.device)
                 out = self.torch_model(tensor)
                 probs = torch.softmax(out, dim=1).cpu().numpy()[0]
                 return probs
@@ -251,19 +301,22 @@ class BrickClassifier:
             return [], 0.0
 
         t0 = time.perf_counter()
-        probs_list = []
-
-        for crop in crops:
-            if crop is None or crop.size == 0 or crop.shape[0] < 5 or crop.shape[1] < 5:
-                continue
-            p = self.classify_crop(crop, assigned_parts=assigned_parts)
-            probs_list.append(p)
-
-        if not probs_list:
+        valid_crops = [c for c in crops if c is not None and c.size > 0 and c.shape[0] >= 5 and c.shape[1] >= 5]
+        if not valid_crops:
             return [], 0.0
 
-        # Average probabilities across all snapshots
-        avg_probs = np.mean(probs_list, axis=0)
+        with self._lock:
+            if self.model_type == "torch" and self.torch_model is not None and HAS_TORCH:
+                batch = np.concatenate([self._preprocess_crop(c) for c in valid_crops], axis=0)
+                with torch.no_grad():
+                    tensor = torch.from_numpy(batch).to(self.device)
+                    out = self.torch_model(tensor)
+                    probs_batch = torch.softmax(out, dim=1).cpu().numpy()
+                avg_probs = np.mean(probs_batch, axis=0)
+            else:
+                probs_list = [self.classify_crop(c, assigned_parts=assigned_parts) for c in valid_crops]
+                avg_probs = np.mean(probs_list, axis=0)
+
         inference_time_ms = (time.perf_counter() - t0) * 1000.0
         self.last_inference_time_ms = inference_time_ms
 

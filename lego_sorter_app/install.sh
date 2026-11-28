@@ -61,6 +61,9 @@ echo "[3/4] Installing Python requirements..."
     "opencv-python-headless>=4.9.0" \
     "pyserial>=3.5" \
     "onnxruntime>=1.18.0" \
+    "torch>=2.2.0" \
+    "torchvision>=0.17.0" \
+    "timm>=1.0.0" \
     "numpy>=1.24.0" \
     "pillow>=10.0.0" \
     "tqdm>=4.66.0"

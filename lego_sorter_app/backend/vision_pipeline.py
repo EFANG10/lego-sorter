@@ -60,6 +60,11 @@ class VisionPipeline:
         self.total_frames = 0
         self.start_time = time.time()
         self.last_cam_retry_time = 0.0
+        self.reconnect_requested = False
+
+    def request_camera_reconnect(self):
+        """Thread-safe signal to reopen camera on the capture thread."""
+        self.reconnect_requested = True
 
     def start(self):
         if self.running:
@@ -130,6 +135,10 @@ class VisionPipeline:
         while self.running:
             t0 = time.time()
 
+            if self.reconnect_requested:
+                self.reconnect_requested = False
+                self._open_camera()
+
             # 1. Grab raw frame from camera
             has_frame = False
             frame = None
@@ -161,7 +170,12 @@ class VisionPipeline:
 
             # 2. Process frame with OpenCV (only if live frame is present)
             if has_frame:
-                annotated = self._process_frame(frame)
+                try:
+                    annotated = self._process_frame(frame)
+                except Exception as e:
+                    logger.error(f"Error processing frame: {e}", exc_info=True)
+                    annotated = frame.copy()
+                    cv2.putText(annotated, f"Vision Error: {str(e)[:45]}", (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
             else:
                 annotated = frame.copy()
                 cv2.putText(annotated, f"FPS: {self.fps} | Standby", (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (150, 150, 150), 1)
