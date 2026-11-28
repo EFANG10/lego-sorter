@@ -27,6 +27,8 @@ except ImportError:
 try:
     import torch
     HAS_TORCH = True
+    # Leave CPU cores free for camera grabber, OpenCV motion tracking, and web streaming
+    torch.set_num_threads(max(2, (os.cpu_count() or 4) // 2))
 except ImportError:
     HAS_TORCH = False
 

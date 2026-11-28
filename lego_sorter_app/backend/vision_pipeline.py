@@ -13,6 +13,8 @@ import cv2
 import time
 import math
 import queue
+import fcntl
+import struct
 import base64
 import logging
 import threading
@@ -142,23 +144,56 @@ class VisionPipeline:
         try:
             device_idx = int(source) if str(source).isdigit() else str(source)
             logger.info(f"Connecting to physical USB camera: {device_idx}...")
-            cap = cv2.VideoCapture(device_idx)
+
+            cap = cv2.VideoCapture(device_idx, cv2.CAP_V4L2) if isinstance(device_idx, int) else cv2.VideoCapture(device_idx)
+            if not cap.isOpened():
+                cap.release()
+                cap = cv2.VideoCapture(device_idx)
+
+            # Force MJPG before resolution/FPS so USB 2.0 webcams (e.g. Logitech Brio) run at full 30 FPS instead of 7.5 FPS YUYV
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             cap.set(cv2.CAP_PROP_FPS, 30)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
             if cap.isOpened():
+                self._disable_v4l2_dynamic_framerate(device_idx)
                 ret, test_frame = cap.read()
                 if ret and test_frame is not None:
                     self.cap = cap
-                    logger.info(f"Successfully connected to USB camera device {device_idx} ({test_frame.shape[1]}x{test_frame.shape[0]})")
+                    fc = int(cap.get(cv2.CAP_PROP_FOURCC))
+                    fc_str = "".join([chr((fc >> 8 * i) & 0xFF) for i in range(4)])
+                    rep_fps = cap.get(cv2.CAP_PROP_FPS)
+                    logger.info(
+                        f"Successfully connected to USB camera device {device_idx} "
+                        f"({test_frame.shape[1]}x{test_frame.shape[0]} @ {rep_fps:.0f} FPS, {fc_str})"
+                    )
                     return
             logger.warning(f"Could not read from camera {device_idx}. Will keep trying to connect...")
             cap.release()
         except Exception as e:
             logger.error(f"Failed to initialize camera source {source}: {e}")
         self.cap = None
+
+    @staticmethod
+    def _disable_v4l2_dynamic_framerate(device_idx):
+        """
+        Disables V4L2_CID_EXPOSURE_AUTO_PRIORITY (exposure_dynamic_framerate = 0) on Linux
+        so UVC webcams (e.g., Logitech Brio 105) do not drop from 30 FPS down to 7.5 FPS
+        in auto-exposure mode.
+        """
+        try:
+            dev_path = f"/dev/video{device_idx}" if isinstance(device_idx, int) else str(device_idx)
+            if not dev_path.startswith("/dev/video"):
+                return
+            vidioc_s_ctrl = 0xC008561C
+            cid_exposure_auto_priority = 0x009A0903
+            with open(dev_path, "rb+", buffering=0) as fd:
+                fcntl.ioctl(fd, vidioc_s_ctrl, struct.pack("Ii", cid_exposure_auto_priority, 0))
+            logger.info(f"Disabled V4L2 dynamic framerate throttling on {dev_path} (locked to target FPS).")
+        except Exception:
+            pass
 
     def _get_no_signal_frame(self) -> np.ndarray:
         """Renders clean standby frame when webcam is disconnected or warming up."""
